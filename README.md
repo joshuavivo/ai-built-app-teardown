@@ -1,5 +1,7 @@
 # AI-built app teardown
 
+> **PRIVATE. DO NOT PUBLISH before Dec 21, 2026, and only on Josh's go.** Delete this line when publishing.
+
 A small booking app for a fictional dog groomer, built the way a fast first version often comes
 out of an AI coding tool, then audited and fixed. Every screen works. The nine holes are in the
 parts nobody clicks.
