@@ -25,6 +25,16 @@ one with a test that runs the attack, fix it, and keep the test so it stays fixe
 
 Each one has a check in `exploits.py` that runs the attack: it succeeds on `before.py` and fails on `after.py`, and a second set of tests proves the fixed app still works for real customers.
 
+```mermaid
+flowchart LR
+  F["finding F1–F9"] --> X["exploit test<br/>runs the attack"]
+  X -->|passes on before.py| V["vulnerable:<br/>the hole is real"]
+  V --> FIX["write the fix"]
+  FIX --> A["same test on after.py"]
+  A -->|now fails| C["customer tests<br/>still pass"]
+  C --> K["keep the test<br/>so it can't come back"]
+```
+
 ## Three of them, in code
 
 **F2 — the session cookie was the user id.** Change `uid=2` to `uid=1` in your browser and you're the owner.
