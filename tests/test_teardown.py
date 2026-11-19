@@ -31,6 +31,8 @@ class TheFixedAppStillWorks(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        # make_app() returns a callable (the WSGI app); staticmethod keeps it from
+        # being bound as a method when accessed via self/cls.
         cls.app = staticmethod(after.make_app())
 
     @classmethod
