@@ -9,6 +9,57 @@ one with a test that runs the attack, fix it, and keep the test so it stays fixe
 
 **Start with [REPORT.md](REPORT.md).** It's the plain-English write-up a business owner would get.
 
+## The nine findings
+
+| # | Finding | Who could do it | What they'd get | Severity |
+|---|---|---|---|---|
+| F1 | Payment **secret** key shipped to every browser | Any visitor | Control of the payment account | **Critical** |
+| F2 | Login cookie is just the user's id number | Any visitor | Log in as anyone, including the owner | **Critical** |
+| F3 | Change the id in the URL, read another booking | Any customer | Others' gate codes and notes | High |
+| F4 | Search box concatenated into the SQL | Any customer | Every booking in the system | High |
+| F5 | Checkout charges whatever the browser sends | Any customer | An $85 groom for 1¢ | High |
+| F6 | Customer-list export with no auth check | Any visitor | Every customer's name, email, phone | High |
+| F7 | Unlimited password guesses | Any visitor | Into any weak-password account | Medium |
+| F8 | Passwords stored as unsalted MD5 | Anyone with the DB | Most passwords, in minutes | Medium |
+| F9 | Errors return the full stack trace | Any customer | A map of the code | Low |
+
+Each one has a check in `exploits.py` that runs the attack: it succeeds on `before.py` and fails on `after.py`, and a second set of tests proves the fixed app still works for real customers.
+
+## Three of them, in code
+
+**F2 — the session cookie was the user id.** Change `uid=2` to `uid=1` in your browser and you're the owner.
+
+```python
+# before.py
+uid = req.cookies.get("uid")                      # the cookie *is* the user id
+# after.py
+uid = sessions.get(req.cookies.get("session", "")) # random server-side token; the cookie reveals nothing
+# ...and the cookie is set HttpOnly; Secure; SameSite=Lax
+```
+
+**F4 — the search box was pasted straight into the query.** Typing `' or 1=1 --` returns every booking.
+
+```python
+# before.py — q goes into the SQL text
+sql = f"select ... where user_id = {user['id']} and dog like '%{q}%'"
+db.execute(sql)
+# after.py — q is a bound value, never part of the query ('%' and '_' escaped too)
+db.execute("select ... where user_id = ? and dog like ? escape '\\'", (user["id"], f"%{q}%"))
+```
+
+**F5 — the browser told the server what to charge.** Edit the request and an $85 groom costs 1¢.
+
+```python
+# before.py — trust the amount in the request
+amount = int(body["amount"])
+# after.py — the browser picks the service; the server owns the price
+if service not in seed.SERVICES:
+    return reply(sr, 400, {"error": "Unknown service"})
+amount = seed.SERVICES[service]
+```
+
+The other six — the shipped payment secret, the IDOR on bookings, the unprotected export, unlimited login attempts, MD5 passwords, and the stack-trace leak — are in [REPORT.md](REPORT.md), each with its own before/after and test.
+
 ## What's here
 
 | File | What it is |
