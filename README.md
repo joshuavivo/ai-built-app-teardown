@@ -84,7 +84,7 @@ The other six — the shipped payment secret, the IDOR on bookings, the unprotec
 ## Run it
 
 ```bash
-python3 -m unittest discover -s tests    # the proof
+python3 -W error::ResourceWarning -m unittest discover -s tests    # the proof (what CI runs)
 python3 before.py                        # http://127.0.0.1:8000, local only
 python3 after.py                         # http://127.0.0.1:8001
 ```
@@ -103,4 +103,6 @@ python3 after.py                         # http://127.0.0.1:8001
 
 Standard library only, Python 3.10 or later. The tests run in-process; the demo servers listen on 127.0.0.1 only.
 
-Architected and directed by Joshua Vivo ([shadowvivo.com](https://shadowvivo.com)), built with AI assistance (Claude). The design and the judgment are mine.
+## Credits
+
+Architected and directed by [Joshua Vivo](https://github.com/joshuavivo) ([Shadow Vivo LLC](https://shadowvivo.com)), built with AI assistance (Claude). The design and the judgment are mine.
