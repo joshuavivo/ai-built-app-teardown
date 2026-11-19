@@ -16,8 +16,14 @@ class EveryFindingIsRealAndClosed(unittest.TestCase):
     def test_each_attack(self):
         for check in exploits.FINDINGS:
             with self.subTest(finding=check.__name__):
-                self.assertTrue(check(before.make_app()), "attack should work on BEFORE")
-                self.assertFalse(check(after.make_app()), "attack should fail on AFTER")
+                vulnerable = before.make_app()
+                fixed = after.make_app()
+                try:
+                    self.assertTrue(check(vulnerable), "attack should work on BEFORE")
+                    self.assertFalse(check(fixed), "attack should fail on AFTER")
+                finally:
+                    vulnerable.close()
+                    fixed.close()
 
 
 class TheFixedAppStillWorks(unittest.TestCase):
@@ -26,6 +32,10 @@ class TheFixedAppStillWorks(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = staticmethod(after.make_app())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.app.close()
 
     def customer(self):
         c = Client(self.app)
@@ -69,6 +79,7 @@ class TheFixedAppStillWorks(unittest.TestCase):
 
     def test_lockout_says_when_to_retry_and_right_password_works_before_it(self):
         app = after.make_app()
+        self.addCleanup(app.close)
         c = Client(app)
         for _ in range(4):
             self.assertEqual(c.login("sam@example.com", "nope").status, 401)
@@ -81,6 +92,7 @@ class TheFixedAppStillWorks(unittest.TestCase):
 
     def test_server_error_gives_a_reference_not_internals(self):
         app = after.make_app()  # break the database to force a real crash
+        self.addCleanup(app.close)
         app.db.execute("drop table bookings")
         c2 = Client(app)
         c2.login("alex@example.com", "alex-pass-123")

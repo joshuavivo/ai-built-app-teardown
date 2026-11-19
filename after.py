@@ -127,6 +127,7 @@ def make_app():
             return reply(start_response, 500, {"error": "Something went wrong", "ref": ref})
 
     app.db = db
+    app.close = db.close  # callers close the app when done so the connection isn't leaked
     return app
 
 

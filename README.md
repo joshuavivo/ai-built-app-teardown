@@ -1,7 +1,5 @@
 # AI-built app teardown
 
-> **PRIVATE. DO NOT PUBLISH before Dec 21, 2026, and only on Josh's go.** Delete this line when publishing.
-
 A small booking app for a fictional dog groomer, built the way a fast first version often comes
 out of an AI coding tool, then audited and fixed. Every screen works. The nine holes are in the
 parts nobody clicks.
@@ -42,6 +40,6 @@ python3 after.py                         # http://127.0.0.1:8001
 - There's no CSRF token. `SameSite=Lax` covers the cross-site form case for these routes, but a
   real app with state-changing GET requests or older browsers needs one.
 
-Standard library only, Python 3.9 or later. The tests run in-process; the demo servers listen on 127.0.0.1 only.
+Standard library only, Python 3.10 or later. The tests run in-process; the demo servers listen on 127.0.0.1 only.
 
-Joshua Vivo · [shadowvivo.com](https://shadowvivo.com)
+Architected and directed by Joshua Vivo ([shadowvivo.com](https://shadowvivo.com)), built with AI assistance (Claude). The design and the judgment are mine.

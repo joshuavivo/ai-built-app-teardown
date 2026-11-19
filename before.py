@@ -82,6 +82,7 @@ def make_app():
             return reply(start_response, 500, {"error": traceback.format_exc()})
 
     app.db = db  # test hook: lets the offline-cracking check read stored hashes
+    app.close = db.close  # callers close the app when done so the connection isn't leaked
     return app
 
 
