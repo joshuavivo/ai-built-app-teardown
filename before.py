@@ -1,7 +1,8 @@
 """Pawprint Booking, BEFORE the audit.
 
 A booking app for a fictional dog groomer, written the way a fast first version often comes out
-of an AI coding tool: it works, every screen loads, and the holes are in the parts nobody clicks.
+of an AI coding tool: every endpoint works, and the holes are in the parts a normal customer never
+touches.
 Each flaw is deliberate and tagged with its finding number from REPORT.md. Do not deploy this.
 """
 import hashlib
@@ -13,13 +14,17 @@ import seed
 from web import Request, reply, serve
 
 
+def hash_password(password):
+    return hashlib.md5(password.encode()).hexdigest()  # F8: fast, unsalted
+
+
 def make_app():
     db = sqlite3.connect(":memory:", check_same_thread=False)
     db.row_factory = sqlite3.Row
     db.executescript(seed.SCHEMA)
     for email, pw, name, phone, admin in seed.USERS:
         db.execute("insert into users(email, pw, name, phone, is_admin) values (?,?,?,?,?)",
-                   (email, hashlib.md5(pw.encode()).hexdigest(), name, phone, admin))  # F8
+                   (email, hash_password(pw), name, phone, admin))  # F8
     for uid, service, dog, notes in seed.BOOKINGS:
         db.execute("insert into bookings(user_id, service, dog, notes, amount, paid) values (?,?,?,?,?,1)",
                    (uid, service, dog, notes, seed.SERVICES[service]))
@@ -40,7 +45,7 @@ def make_app():
         if m == "POST" and p == "/api/login":  # F7: no limit on attempts
             body = req.json()
             row = db.execute("select * from users where email = ?", (body.get("email"),)).fetchone()
-            if row and row["pw"] == hashlib.md5(str(body.get("password")).encode()).hexdigest():
+            if row and row["pw"] == hash_password(str(body.get("password"))):
                 return reply(sr, 200, {"ok": True}, headers=[("Set-Cookie", f"uid={row['id']}; Path=/")])
             return reply(sr, 401, {"error": "Wrong email or password"})
 
@@ -82,6 +87,7 @@ def make_app():
             return reply(start_response, 500, {"error": traceback.format_exc()})
 
     app.db = db  # test hook: lets the offline-cracking check read stored hashes
+    app.hash_password = hash_password  # test hook: how a new account's password would be stored
     app.close = db.close  # callers close the app when done so the connection isn't leaked
     return app
 

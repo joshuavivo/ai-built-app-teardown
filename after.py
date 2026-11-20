@@ -126,7 +126,8 @@ def make_app():
             errors.append((ref, repr(exc)))
             return reply(start_response, 500, {"error": "Something went wrong", "ref": ref})
 
-    app.db = db
+    app.db = db  # test hooks, as in before.py
+    app.hash_password = hash_password
     app.close = db.close  # callers close the app when done so the connection isn't leaked
     return app
 

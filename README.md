@@ -1,8 +1,8 @@
 # AI-built app teardown
 
 A small booking app for a fictional dog groomer, built the way a fast first version often comes
-out of an AI coding tool, then audited and fixed. Every screen works. The nine holes are in the
-parts nobody clicks.
+out of an AI coding tool, then audited and fixed. It is a JSON API with no UI. Every endpoint
+works. The nine holes are in the parts a normal customer never touches.
 
 I built this to show how I audit an app that went live quickly: find the easy ways in, prove each
 one with a test that runs the attack, fix it, and keep the test so it stays fixed.
@@ -87,6 +87,20 @@ The other six — the shipped payment secret, the IDOR on bookings, the unprotec
 python3 -W error::ResourceWarning -m unittest discover -s tests    # the proof (what CI runs)
 python3 before.py                        # http://127.0.0.1:8000, local only
 python3 after.py                         # http://127.0.0.1:8001
+```
+
+With `after.py` running, log in as one of the made-up customers and ask who you are:
+
+```bash
+curl -i -c cookies.txt -X POST http://127.0.0.1:8001/api/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email": "alex@example.com", "password": "alex-pass-123"}'
+# HTTP/1.0 200 OK
+# Set-Cookie: session=<random token>; Path=/; HttpOnly; Secure; SameSite=Lax
+# {"ok": true}
+
+curl -b cookies.txt http://127.0.0.1:8001/api/me
+# {"email": "alex@example.com", "name": "Alex Moreno"}
 ```
 
 ## Limits
