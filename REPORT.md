@@ -12,9 +12,9 @@ second set of tests confirms the fixed app still works for real customers.
 
 ## Summary
 
-Every screen worked. A customer could book, pay and log in without noticing anything wrong.
-All nine problems sit in the parts nobody clicks: what the server trusts, what it sends back,
-and what it remembers.
+Every endpoint worked. A customer could book, pay and log in without noticing anything wrong.
+All nine problems sit in the parts a normal customer never touches: what the server trusts, what
+it sends back, and what it remembers.
 
 | # | Finding | Who could do it | What they'd get | Severity |
 |---|---|---|---|---|
