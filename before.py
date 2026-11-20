@@ -1,7 +1,8 @@
 """Pawprint Booking, BEFORE the audit.
 
 A booking app for a fictional dog groomer, written the way a fast first version often comes out
-of an AI coding tool: it works, every screen loads, and the holes are in the parts nobody clicks.
+of an AI coding tool: every endpoint works, and the holes are in the parts a normal customer never
+touches.
 Each flaw is deliberate and tagged with its finding number from REPORT.md. Do not deploy this.
 """
 import hashlib
