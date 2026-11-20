@@ -1,3 +1,5 @@
+import hashlib
+import secrets
 import sys
 import unittest
 from pathlib import Path
@@ -102,6 +104,35 @@ class TheFixedAppStillWorks(unittest.TestCase):
         self.assertEqual(r.status, 500)
         self.assertNotIn("Traceback", r.text)
         self.assertIn("ref", r.json())
+
+
+def pbkdf2(password, iterations, salt):
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, iterations)
+    return f"pbkdf2${iterations}${salt.hex()}${digest.hex()}"
+
+
+class TheF8CheckRejectsWeakStorage(unittest.TestCase):
+    """The F8 check has to catch weak storage of every kind, not only MD5. Each test swaps a
+    weak scheme into an otherwise fixed app; the check must say the attack works."""
+
+    def attack_works_when_stored_with(self, hasher):
+        app = after.make_app()
+        self.addCleanup(app.close)
+        app.hash_password = hasher
+        app.db.execute("update users set pw = ? where email = ?",
+                       (hasher("sam-pass-456"), "sam@example.com"))
+        return exploits.f8_offline_cracking(app)
+
+    def test_plaintext_is_not_a_fix(self):
+        self.assertTrue(self.attack_works_when_stored_with(lambda pw: pw))
+
+    def test_too_few_iterations_is_not_a_fix(self):
+        self.assertTrue(self.attack_works_when_stored_with(
+            lambda pw: pbkdf2(pw, 1_000, secrets.token_bytes(16))))
+
+    def test_a_shared_salt_is_not_a_fix(self):
+        self.assertTrue(self.attack_works_when_stored_with(
+            lambda pw: pbkdf2(pw, 600_000, b"same-for-all-pws")))
 
 
 if __name__ == "__main__":

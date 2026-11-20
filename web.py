@@ -56,7 +56,6 @@ class Client:
         environ = {
             "REQUEST_METHOD": method, "PATH_INFO": path, "QUERY_STRING": qs,
             "CONTENT_LENGTH": str(len(data)), "wsgi.input": io.BytesIO(data),
-            "REMOTE_ADDR": "203.0.113.7",
             "HTTP_COOKIE": "; ".join(f"{k}={v}" for k, v in self.cookies.items()),
         }
         seen = {}
