@@ -105,6 +105,18 @@ class TheFixedAppStillWorks(unittest.TestCase):
         self.assertNotIn("Traceback", r.text)
         self.assertIn("ref", r.json())
 
+    def test_a_json_body_that_is_not_an_object_is_a_bad_request(self):
+        # Valid JSON that isn't an object (a list, a number) used to reach body.get() and crash
+        # into a 500. It is the client's mistake, so it gets a 400 on both routes that read JSON.
+        app = after.make_app()
+        self.addCleanup(app.close)
+        c = Client(app)
+        for raw in (b"[1]", b"42", b'"x"'):
+            self.assertEqual(c.post("/api/login", raw=raw).status, 400)
+        c.login("alex@example.com", "alex-pass-123")
+        self.assertEqual(c.post("/api/checkout", raw=b"[1]").status, 400)
+        self.assertEqual(app.errors, [])
+
     def test_the_detail_is_kept_on_the_server_under_the_reference(self):
         # REPORT.md F9: "The detail is kept on the server under that number." Check it is:
         # the full traceback is stored and logged under the ref the person was shown.

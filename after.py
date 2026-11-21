@@ -65,6 +65,8 @@ def make_app():
                 body = req.json()
             except ValueError:
                 return reply(sr, 400, {"error": "Bad request"})
+            if not isinstance(body, dict):  # valid JSON but not an object, e.g. [1]
+                return reply(sr, 400, {"error": "Bad request"})
             email = str(body.get("email", "")).lower()
             now = time.monotonic()
             recent = [t for t in failures.get(email, []) if now - t < WINDOW_SECONDS]
@@ -111,6 +113,8 @@ def make_app():
             try:
                 body = req.json()
             except ValueError:
+                return reply(sr, 400, {"error": "Bad request"})
+            if not isinstance(body, dict):  # valid JSON but not an object, e.g. [1]
                 return reply(sr, 400, {"error": "Bad request"})
             service = body.get("service")
             if service not in seed.SERVICES:
