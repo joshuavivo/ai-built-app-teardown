@@ -5,13 +5,17 @@ Same app, same routes, same data. Each change is tagged with the finding it clos
 import hashlib
 import hmac
 import json
+import logging
 import secrets
 import sqlite3
 import time
+import traceback
 import uuid
 
 import seed
 from web import Request, reply, serve
+
+log = logging.getLogger("pawprint.after")
 
 ITERATIONS = 600_000      # F8: PBKDF2-SHA256, OWASP's current figure
 MAX_FAILURES = 5          # F7: failed logins per account ...
@@ -43,7 +47,7 @@ def make_app():
 
     sessions = {}  # F2: random token -> user id, kept on the server
     failures = {}  # F7: email -> timestamps of recent failed logins
-    errors = []    # F9: full detail stays here (a real app sends it to its log)
+    errors = []    # F9: (ref, full traceback) for every server error; also written to the log
 
     def current_user(req):
         uid = sessions.get(req.cookies.get("session", ""))
@@ -123,10 +127,12 @@ def make_app():
             return route(Request(environ), start_response)
         except Exception as exc:  # F9: a reference number out, the detail stays in
             ref = uuid.uuid4().hex[:8]
-            errors.append((ref, repr(exc)))
+            errors.append((ref, traceback.format_exc()))
+            log.error("server error ref=%s: %r", ref, exc, exc_info=True)
             return reply(start_response, 500, {"error": "Something went wrong", "ref": ref})
 
     app.db = db  # test hooks, as in before.py
+    app.errors = errors
     app.hash_password = hash_password
     app.close = db.close  # callers close the app when done so the connection isn't leaked
     return app

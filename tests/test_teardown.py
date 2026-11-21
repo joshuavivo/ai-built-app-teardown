@@ -105,6 +105,22 @@ class TheFixedAppStillWorks(unittest.TestCase):
         self.assertNotIn("Traceback", r.text)
         self.assertIn("ref", r.json())
 
+    def test_the_detail_is_kept_on_the_server_under_the_reference(self):
+        # REPORT.md F9: "The detail is kept on the server under that number." Check it is:
+        # the full traceback is stored and logged under the ref the person was shown.
+        app = after.make_app()
+        self.addCleanup(app.close)
+        app.db.execute("drop table bookings")
+        c = Client(app)
+        c.login("alex@example.com", "alex-pass-123")
+        with self.assertLogs("pawprint", level="ERROR") as logged:
+            r = c.get("/api/bookings/1")
+        ref = r.json()["ref"]
+        detail = dict(app.errors)[ref]
+        self.assertIn("Traceback", detail)
+        self.assertIn("no such table: bookings", detail)
+        self.assertIn(ref, logged.output[0])
+
 
 def pbkdf2(password, iterations, salt):
     digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, iterations)
