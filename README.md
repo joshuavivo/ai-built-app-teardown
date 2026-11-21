@@ -1,5 +1,9 @@
 # AI-built app teardown
 
+**An app can pass every demo and still hand a stranger your payment account, your customer list or
+a free checkout.** This is what an audit of one looks like: each hole found, proven with a test that
+runs the attack, fixed, and kept fixed.
+
 A small booking app for a fictional dog groomer, built the way a fast first version often comes
 out of an AI coding tool, then audited and fixed. It is a JSON API with no UI. Every endpoint
 works. The nine holes are in the parts a normal customer never touches.
