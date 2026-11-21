@@ -20,6 +20,7 @@ log = logging.getLogger("pawprint.after")
 ITERATIONS = 600_000      # F8: PBKDF2-SHA256, OWASP's current figure
 MAX_FAILURES = 5          # F7: failed logins per account ...
 WINDOW_SECONDS = 15 * 60  # ... inside this window before it locks
+SESSION_SECONDS = 12 * 60 * 60  # F2: a session ends after 12 hours, logged out or not
 
 
 def hash_password(password, salt=None):
@@ -45,13 +46,19 @@ def make_app():
         db.execute("insert into bookings(user_id, service, dog, notes, amount, paid) values (?,?,?,?,?,1)",
                    (uid, service, dog, notes, seed.SERVICES[service]))
 
-    sessions = {}  # F2: random token -> user id, kept on the server
+    sessions = {}  # F2: random token -> (user id, when it was issued), kept on the server
     failures = {}  # F7: email -> timestamps of recent failed logins
     errors = []    # F9: (ref, full traceback) for every server error; also written to the log
 
     def current_user(req):
-        uid = sessions.get(req.cookies.get("session", ""))
-        return db.execute("select * from users where id = ?", (uid,)).fetchone() if uid else None
+        token = req.cookies.get("session", "")
+        uid, issued = sessions.get(token, (None, 0.0))
+        if uid is None:
+            return None
+        if time.monotonic() - issued > SESSION_SECONDS:  # F2: an old token stops working
+            sessions.pop(token, None)
+            return None
+        return db.execute("select * from users where id = ?", (uid,)).fetchone()
 
     def route(req, sr):
         m, p = req.method, req.path
@@ -77,7 +84,7 @@ def make_app():
             if row and check_password(str(body.get("password", "")), row["pw"]):
                 failures.pop(email, None)
                 token = secrets.token_urlsafe(32)
-                sessions[token] = row["id"]
+                sessions[token] = (row["id"], time.monotonic())
                 cookie = f"session={token}; Path=/; HttpOnly; Secure; SameSite=Lax"
                 return reply(sr, 200, {"ok": True}, headers=[("Set-Cookie", cookie)])
             recent.append(now)
@@ -86,6 +93,11 @@ def make_app():
         user = current_user(req)
         if not user:
             return reply(sr, 401, {"error": "Log in first"})
+
+        if m == "POST" and p == "/api/logout":  # F2: the server forgets the token, not just the browser
+            sessions.pop(req.cookies.get("session", ""), None)
+            cookie = "session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"
+            return reply(sr, 200, {"ok": True}, headers=[("Set-Cookie", cookie)])
 
         if p == "/admin/export":  # F6: the server checks who is asking
             if not user["is_admin"]:

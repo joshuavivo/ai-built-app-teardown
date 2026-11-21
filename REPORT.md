@@ -44,7 +44,8 @@ Change it to `uid=1` and the app thinks you are the owner. No password needed.
 **Proof.** `f2_forged_session`: with no login at all, set the cookie to 1 and ask the app who you are.
 **Fix.** A long random token that only the server can map back to a person, marked so scripts
 on the page can't read it (`HttpOnly`), it only travels over HTTPS (`Secure`), and it isn't sent by
-other sites' forms (`SameSite`).
+other sites' forms (`SameSite`). The token stops working after 12 hours, and logging out ends it on the server, so a
+copied cookie doesn't stay valid forever.
 
 ### F3. Change the number in the URL, see another booking
 **What's wrong.** `/api/bookings/1` is Alex's booking. `/api/bookings/2` is Sam's, and Alex can

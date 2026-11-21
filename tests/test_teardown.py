@@ -3,6 +3,7 @@ import secrets
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -104,6 +105,31 @@ class TheFixedAppStillWorks(unittest.TestCase):
         self.assertEqual(r.status, 500)
         self.assertNotIn("Traceback", r.text)
         self.assertIn("ref", r.json())
+
+    def test_logout_ends_the_session_on_the_server(self):
+        app = after.make_app()
+        self.addCleanup(app.close)
+        c = Client(app)
+        c.login("alex@example.com", "alex-pass-123")
+        stolen = dict(c.cookies)  # what an attacker who copied the cookie would hold
+        r = c.post("/api/logout")
+        self.assertEqual(r.status, 200)
+        self.assertIn("Max-Age=0", dict(r.headers)["Set-Cookie"])
+        thief = Client(app)
+        thief.cookies.update(stolen)
+        self.assertEqual(thief.get("/api/me").status, 401)  # the token is dead, not just forgotten by the browser
+
+    def test_a_session_expires_after_twelve_hours(self):
+        app = after.make_app()
+        self.addCleanup(app.close)
+        c = Client(app)
+        start = after.time.monotonic()
+        with mock.patch.object(after.time, "monotonic", return_value=start):
+            c.login("alex@example.com", "alex-pass-123")
+        with mock.patch.object(after.time, "monotonic", return_value=start + after.SESSION_SECONDS - 1):
+            self.assertEqual(c.get("/api/me").status, 200)
+        with mock.patch.object(after.time, "monotonic", return_value=start + after.SESSION_SECONDS + 1):
+            self.assertEqual(c.get("/api/me").status, 401)
 
     def test_a_json_body_that_is_not_an_object_is_a_bad_request(self):
         # Valid JSON that isn't an object (a list, a number) used to reach body.get() and crash
