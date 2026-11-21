@@ -112,6 +112,12 @@ curl -b cookies.txt http://127.0.0.1:8001/api/me
   A real app weighs that against a delay that grows with each failure, or a CAPTCHA.
 - The login answers slightly faster for an email that doesn't exist, which can hint at who has an
   account. Not fixed here.
+- The customer-list export writes names straight into CSV. A name starting with `=`, `+`, `-` or
+  `@` can run as a formula when the owner opens the file in a spreadsheet, and a comma in a name
+  shifts the columns. A real export quotes every field and neutralises those first characters.
+- The failed-login counter keeps an entry for every email anyone tries, and an expired session is
+  only removed when someone presents it again, so both grow without limit. A real app keeps them
+  in a cache with expiry.
 - There's no CSRF token. `SameSite=Lax` covers the cross-site form case for these routes, but a
   real app with state-changing GET requests or older browsers needs one.
 

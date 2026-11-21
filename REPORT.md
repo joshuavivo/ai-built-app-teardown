@@ -84,6 +84,7 @@ and says so. The check happens before the password is even looked at.
 **What's wrong.** Passwords are stored as MD5. If the database ever leaks, cracking tools test
 billions of MD5 guesses a second, and two people with the same password have the same stored value.
 **Proof.** `f8_offline_cracking`: a four-word list cracks Sam's password from the stored value.
+The list contains Sam's real password, as real leaked-password lists contain most people's.
 The check also counts the attack as working if passwords are stored as plain text, with fewer
 than 600,000 PBKDF2 iterations, or identically for two accounts with the same password, so a
 weaker fix can't pass.
