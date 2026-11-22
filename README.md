@@ -1,5 +1,9 @@
 # AI-built app teardown
 
+**An app can pass every demo and still hand a stranger your payment account, your customer list or
+a free checkout.** This is what an audit of one looks like: each hole found, proven with a test that
+runs the attack, fixed, and kept fixed.
+
 A small booking app for a fictional dog groomer, built the way a fast first version often comes
 out of an AI coding tool, then audited and fixed. It is a JSON API with no UI. Every endpoint
 works. The nine holes are in the parts a normal customer never touches.
@@ -21,7 +25,7 @@ one with a test that runs the attack, fix it, and keep the test so it stays fixe
 | F6 | Customer-list export with no auth check | Any visitor | Every customer's name, email, phone | High |
 | F7 | Unlimited password guesses | Any visitor | Into any weak-password account | Medium |
 | F8 | Passwords stored as unsalted MD5 | Anyone with the DB | Most passwords, in minutes | Medium |
-| F9 | Errors return the full stack trace | Any customer | A map of the code | Low |
+| F9 | Errors return the full stack trace | Any visitor (no login needed) | A map of the code | Low |
 
 Each one has a check in `exploits.py` that runs the attack: it succeeds on `before.py` and fails on `after.py`, and a second set of tests proves the fixed app still works for real customers.
 
@@ -43,8 +47,9 @@ flowchart LR
 # before.py
 uid = req.cookies.get("uid")                      # the cookie *is* the user id
 # after.py
-uid = sessions.get(req.cookies.get("session", "")) # random server-side token; the cookie reveals nothing
-# ...and the cookie is set HttpOnly; Secure; SameSite=Lax
+uid, issued = sessions.get(req.cookies.get("session", ""), (None, 0.0))  # random server-side token
+if time.monotonic() - issued > SESSION_SECONDS: ...  # and it expires after 12 hours
+# ...the cookie is set HttpOnly; Secure; SameSite=Lax, and logout deletes the token on the server
 ```
 
 **F4 — the search box was pasted straight into the query.** Typing `' or 1=1 --` returns every booking.
@@ -112,6 +117,16 @@ curl -b cookies.txt http://127.0.0.1:8001/api/me
   A real app weighs that against a delay that grows with each failure, or a CAPTCHA.
 - The login answers slightly faster for an email that doesn't exist, which can hint at who has an
   account. Not fixed here.
+- The customer-list export writes names straight into CSV. A name starting with `=`, `+`, `-` or
+  `@` can run as a formula when the owner opens the file in a spreadsheet, and a comma in a name
+  shifts the columns. A real export quotes every field and neutralises those first characters.
+- The failed-login counter keeps an entry for every email anyone tries, and an expired session is
+  only removed when someone presents it again, so both grow without limit. A real app keeps them
+  in a cache with expiry.
+- Logout ends the session it's called from. Other sessions for the same person stay live until
+  they expire; a real app offers "log out everywhere" and ends all sessions on a password change.
+- There's no request-size limit: a large body is read whole before anything checks it. A real
+  deployment caps it at the proxy or in the app.
 - There's no CSRF token. `SameSite=Lax` covers the cross-site form case for these routes, but a
   real app with state-changing GET requests or older browsers needs one.
 

@@ -1,8 +1,11 @@
 import hashlib
+import io
+import json
 import secrets
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -104,6 +107,114 @@ class TheFixedAppStillWorks(unittest.TestCase):
         self.assertEqual(r.status, 500)
         self.assertNotIn("Traceback", r.text)
         self.assertIn("ref", r.json())
+
+    def test_logout_ends_the_session_on_the_server(self):
+        app = after.make_app()
+        self.addCleanup(app.close)
+        c = Client(app)
+        c.login("alex@example.com", "alex-pass-123")
+        stolen = dict(c.cookies)  # what an attacker who copied the cookie would hold
+        r = c.post("/api/logout")
+        self.assertEqual(r.status, 200)
+        self.assertIn("Max-Age=0", dict(r.headers)["Set-Cookie"])
+        thief = Client(app)
+        thief.cookies.update(stolen)
+        self.assertEqual(thief.get("/api/me").status, 401)  # the token is dead, not just forgotten by the browser
+
+    def test_a_session_expires_after_twelve_hours(self):
+        app = after.make_app()
+        self.addCleanup(app.close)
+        c = Client(app)
+        start = after.time.monotonic()
+        with mock.patch.object(after.time, "monotonic", return_value=start):
+            c.login("alex@example.com", "alex-pass-123")
+        with mock.patch.object(after.time, "monotonic", return_value=start + after.SESSION_SECONDS - 1):
+            self.assertEqual(c.get("/api/me").status, 200)
+        with mock.patch.object(after.time, "monotonic", return_value=start + after.SESSION_SECONDS + 1):
+            self.assertEqual(c.get("/api/me").status, 401)
+
+    def test_a_json_body_that_is_not_an_object_is_a_bad_request(self):
+        # Valid JSON that isn't an object (a list, a number) used to reach body.get() and crash
+        # into a 500. It is the client's mistake, so it gets a 400 on both routes that read JSON.
+        app = after.make_app()
+        self.addCleanup(app.close)
+        c = Client(app)
+        for raw in (b"[1]", b"42", b'"x"'):
+            self.assertEqual(c.post("/api/login", raw=raw).status, 400)
+        c.login("alex@example.com", "alex-pass-123")
+        self.assertEqual(c.post("/api/checkout", raw=b"[1]").status, 400)
+        self.assertEqual(app.errors, [])
+
+    def test_a_lockout_lasts_fifteen_minutes_from_when_it_starts(self):
+        # Five misses spread over 14 minutes used to "lock" only until the oldest miss aged out,
+        # so a guess got through 61 seconds after the lock. The lock now runs from its start.
+        app = after.make_app()
+        self.addCleanup(app.close)
+        c = Client(app)
+        t0 = after.time.monotonic()
+        for i in range(after.MAX_FAILURES):
+            with mock.patch.object(after.time, "monotonic", return_value=t0 + i * 210):  # 0..14 min
+                self.assertEqual(c.login("sam@example.com", f"wrong-{i}").status, 401)
+        locked_at = t0 + (after.MAX_FAILURES - 1) * 210
+        with mock.patch.object(after.time, "monotonic", return_value=locked_at + 61):
+            r = c.login("sam@example.com", "wrong-again")
+        self.assertEqual(r.status, 429)
+        self.assertIn("14 minutes", r.text)
+        with mock.patch.object(after.time, "monotonic", return_value=locked_at + after.WINDOW_SECONDS + 1):
+            self.assertEqual(c.login("sam@example.com", "wrong-later").status, 401)  # unlocked, just wrong
+
+    def test_bad_client_input_is_a_400_not_a_server_error(self):
+        # Each of these used to crash after.py into a 500 (and a stored traceback), most of
+        # them without logging in.
+        app = after.make_app()
+        self.addCleanup(app.close)
+
+        def raw_call(body, content_length=None):
+            seen = {}
+            environ = {"REQUEST_METHOD": "POST", "PATH_INFO": "/api/login", "QUERY_STRING": "",
+                       "CONTENT_LENGTH": content_length if content_length is not None else str(len(body)),
+                       "wsgi.input": io.BytesIO(body), "HTTP_COOKIE": ""}
+            app(environ, lambda status, headers: seen.setdefault("status", int(status.split()[0])))
+            return seen["status"]
+
+        surrogate = json.dumps({"email": "sam@example.com", "password": "\ud800"}).encode()
+        bad_email = json.dumps({"email": "\ud800@example.com", "password": "x"}).encode()
+        deep = b"[" * 200_000 + b"]" * 200_000
+        self.assertEqual(raw_call(surrogate), 400)
+        self.assertEqual(raw_call(bad_email), 400)
+        self.assertEqual(raw_call(b"{}", content_length="abc"), 400)
+        self.assertEqual(raw_call(deep), 400)
+        c = Client(app)
+        c.login("alex@example.com", "alex-pass-123")
+        self.assertEqual(c.post("/api/checkout", {"service": ["bath"]}).status, 400)
+        self.assertEqual(c.post("/api/checkout", raw=json.dumps({"service": "bath", "dog": "\ud800"}).encode()).status, 400)
+        self.assertEqual(app.errors, [])
+
+    def test_only_the_most_recent_errors_are_kept(self):
+        app = after.make_app()
+        self.addCleanup(app.close)
+        app.db.execute("drop table bookings")
+        c = Client(app)
+        c.login("alex@example.com", "alex-pass-123")
+        with mock.patch.object(after, "MAX_KEPT_ERRORS", 2), self.assertLogs("pawprint", level="ERROR"):
+            refs = [c.get("/api/bookings/1").json()["ref"] for _ in range(3)]
+        self.assertEqual([ref for ref, _ in app.errors], refs[1:])
+
+    def test_the_detail_is_kept_on_the_server_under_the_reference(self):
+        # REPORT.md F9: "The detail is kept on the server under that number." Check it is:
+        # the full traceback is stored and logged under the ref the person was shown.
+        app = after.make_app()
+        self.addCleanup(app.close)
+        app.db.execute("drop table bookings")
+        c = Client(app)
+        c.login("alex@example.com", "alex-pass-123")
+        with self.assertLogs("pawprint", level="ERROR") as logged:
+            r = c.get("/api/bookings/1")
+        ref = r.json()["ref"]
+        detail = dict(app.errors)[ref]
+        self.assertIn("Traceback", detail)
+        self.assertIn("no such table: bookings", detail)
+        self.assertIn(ref, logged.output[0])
 
 
 def pbkdf2(password, iterations, salt):

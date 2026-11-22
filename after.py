@@ -5,17 +5,24 @@ Same app, same routes, same data. Each change is tagged with the finding it clos
 import hashlib
 import hmac
 import json
+import logging
+import math
 import secrets
 import sqlite3
 import time
+import traceback
 import uuid
 
 import seed
 from web import Request, reply, serve
 
+log = logging.getLogger("pawprint.after")
+
 ITERATIONS = 600_000      # F8: PBKDF2-SHA256, OWASP's current figure
 MAX_FAILURES = 5          # F7: failed logins per account ...
 WINDOW_SECONDS = 15 * 60  # ... inside this window before it locks
+MAX_KEPT_ERRORS = 1000  # F9: the newest server errors kept in memory (the log has them all)
+SESSION_SECONDS = 12 * 60 * 60  # F2: a session ends after 12 hours, logged out or not
 
 
 def hash_password(password, salt=None):
@@ -30,6 +37,15 @@ def check_password(password, stored):
     return hmac.compare_digest(test.hex(), digest)
 
 
+def _encodes(text):
+    """False for text with lone surrogates, which can't be hashed or stored."""
+    try:
+        text.encode("utf-8")
+        return True
+    except UnicodeEncodeError:
+        return False
+
+
 def make_app():
     db = sqlite3.connect(":memory:", check_same_thread=False)
     db.row_factory = sqlite3.Row
@@ -41,13 +57,20 @@ def make_app():
         db.execute("insert into bookings(user_id, service, dog, notes, amount, paid) values (?,?,?,?,?,1)",
                    (uid, service, dog, notes, seed.SERVICES[service]))
 
-    sessions = {}  # F2: random token -> user id, kept on the server
+    sessions = {}  # F2: random token -> (user id, when it was issued), kept on the server
     failures = {}  # F7: email -> timestamps of recent failed logins
-    errors = []    # F9: full detail stays here (a real app sends it to its log)
+    locked = {}    # F7: email -> when its lock ends
+    errors = []    # F9: (ref, full traceback) for every server error; also written to the log
 
     def current_user(req):
-        uid = sessions.get(req.cookies.get("session", ""))
-        return db.execute("select * from users where id = ?", (uid,)).fetchone() if uid else None
+        token = req.cookies.get("session", "")
+        uid, issued = sessions.get(token, (None, 0.0))
+        if uid is None:
+            return None
+        if time.monotonic() - issued > SESSION_SECONDS:  # F2: an old token stops working
+            sessions.pop(token, None)
+            return None
+        return db.execute("select * from users where id = ?", (uid,)).fetchone()
 
     def route(req, sr):
         m, p = req.method, req.path
@@ -59,27 +82,43 @@ def make_app():
         if m == "POST" and p == "/api/login":
             try:
                 body = req.json()
-            except ValueError:
+            except (ValueError, RecursionError):  # bad JSON, or nested too deep to parse
                 return reply(sr, 400, {"error": "Bad request"})
-            email = str(body.get("email", "")).lower()
+            if not isinstance(body, dict):  # valid JSON but not an object, e.g. [1]
+                return reply(sr, 400, {"error": "Bad request"})
+            email, password = body.get("email", ""), body.get("password", "")
+            if not all(isinstance(v, str) and _encodes(v) for v in (email, password)):
+                return reply(sr, 400, {"error": "Bad request"})
+            email = email.lower()
             now = time.monotonic()
+            until = locked.get(email, 0.0)
+            if now < until:  # F7: checked before the password is even looked at
+                minutes = math.ceil((until - now) / 60)
+                return reply(sr, 429, {"error": f"Too many attempts. Try again in {minutes} minute{'s' if minutes != 1 else ''}."})
+            locked.pop(email, None)
             recent = [t for t in failures.get(email, []) if now - t < WINDOW_SECONDS]
             failures[email] = recent
-            if len(recent) >= MAX_FAILURES:  # F7: checked before the password is even looked at
-                return reply(sr, 429, {"error": "Too many attempts. Try again in 15 minutes."})
             row = db.execute("select * from users where email = ?", (email,)).fetchone()
-            if row and check_password(str(body.get("password", "")), row["pw"]):
+            if row and check_password(password, row["pw"]):
                 failures.pop(email, None)
                 token = secrets.token_urlsafe(32)
-                sessions[token] = row["id"]
+                sessions[token] = (row["id"], time.monotonic())
                 cookie = f"session={token}; Path=/; HttpOnly; Secure; SameSite=Lax"
                 return reply(sr, 200, {"ok": True}, headers=[("Set-Cookie", cookie)])
             recent.append(now)
+            if len(recent) >= MAX_FAILURES:  # F7: the lock runs for the full window from now
+                locked[email] = now + WINDOW_SECONDS
+                failures.pop(email, None)
             return reply(sr, 401, {"error": "Wrong email or password"})
 
         user = current_user(req)
         if not user:
             return reply(sr, 401, {"error": "Log in first"})
+
+        if m == "POST" and p == "/api/logout":  # F2: the server forgets the token, not just the browser
+            sessions.pop(req.cookies.get("session", ""), None)
+            cookie = "session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"
+            return reply(sr, 200, {"ok": True}, headers=[("Set-Cookie", cookie)])
 
         if p == "/admin/export":  # F6: the server checks who is asking
             if not user["is_admin"]:
@@ -106,27 +145,39 @@ def make_app():
         if m == "POST" and p == "/api/checkout":  # F5: the price comes from the server's list
             try:
                 body = req.json()
-            except ValueError:
+            except (ValueError, RecursionError):  # bad JSON, or nested too deep to parse
+                return reply(sr, 400, {"error": "Bad request"})
+            if not isinstance(body, dict):  # valid JSON but not an object, e.g. [1]
                 return reply(sr, 400, {"error": "Bad request"})
             service = body.get("service")
-            if service not in seed.SERVICES:
+            if not isinstance(service, str) or service not in seed.SERVICES:
                 return reply(sr, 400, {"error": "Unknown service"})
+            dog, notes = str(body.get("dog", "")), str(body.get("notes", ""))
+            if not (_encodes(dog) and _encodes(notes)):
+                return reply(sr, 400, {"error": "Bad request"})
             amount = seed.SERVICES[service]
             db.execute("insert into bookings(user_id, service, dog, notes, amount, paid) values (?,?,?,?,?,1)",
-                       (user["id"], service, str(body.get("dog", "")), str(body.get("notes", "")), amount))
+                       (user["id"], service, dog, notes, amount))
             return reply(sr, 200, {"charged": amount})
 
         return reply(sr, 404, {"error": "Not found"})
 
     def app(environ, start_response):
         try:
-            return route(Request(environ), start_response)
+            req = Request(environ)
+        except ValueError:  # e.g. a Content-Length that isn't a number
+            return reply(start_response, 400, {"error": "Bad request"})
+        try:
+            return route(req, start_response)
         except Exception as exc:  # F9: a reference number out, the detail stays in
             ref = uuid.uuid4().hex[:8]
-            errors.append((ref, repr(exc)))
+            errors.append((ref, traceback.format_exc()))
+            del errors[:-MAX_KEPT_ERRORS]  # bounded: a flood of errors can't fill memory
+            log.error("server error ref=%s: %r", ref, exc, exc_info=True)
             return reply(start_response, 500, {"error": "Something went wrong", "ref": ref})
 
     app.db = db  # test hooks, as in before.py
+    app.errors = errors
     app.hash_password = hash_password
     app.close = db.close  # callers close the app when done so the connection isn't leaked
     return app

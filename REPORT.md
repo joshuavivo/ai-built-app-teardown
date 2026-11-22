@@ -26,7 +26,7 @@ it sends back, and what it remembers.
 | F6 | Customer list download has no lock | Any visitor | Every customer's name, email and phone | High |
 | F7 | Unlimited password guesses | Any visitor | Into any account with a weak password | Medium |
 | F8 | Passwords stored with a fast hash and no salt | Anyone who gets a copy of the database | Most passwords, in minutes | Medium |
-| F9 | Errors show the code's internals | Any customer | A map of the code for the next attack | Low |
+| F9 | Errors show the code's internals | Any visitor (no login needed) | A map of the code for the next attack | Low |
 
 ## Findings
 
@@ -44,7 +44,8 @@ Change it to `uid=1` and the app thinks you are the owner. No password needed.
 **Proof.** `f2_forged_session`: with no login at all, set the cookie to 1 and ask the app who you are.
 **Fix.** A long random token that only the server can map back to a person, marked so scripts
 on the page can't read it (`HttpOnly`), it only travels over HTTPS (`Secure`), and it isn't sent by
-other sites' forms (`SameSite`).
+other sites' forms (`SameSite`). The token stops working after 12 hours, and logging out ends it on the server, so a
+copied cookie doesn't stay valid forever.
 
 ### F3. Change the number in the URL, see another booking
 **What's wrong.** `/api/bookings/1` is Alex's booking. `/api/bookings/2` is Sam's, and Alex can
@@ -77,12 +78,13 @@ linked anywhere, and that was the only protection. Anyone who guessed or found t
 **What's wrong.** The login form lets anyone try passwords forever. A script tries thousands a minute.
 **Proof.** `f7_unlimited_password_guesses`: the right password is the 25th guess and it gets in.
 **Fix.** After 5 wrong passwords in 15 minutes, that account stops accepting attempts for 15 minutes
-and says so. The check happens before the password is even looked at.
+from the fifth miss, and says how long is left. The check happens before the password is even looked at.
 
 ### F8. Passwords stored with a fast hash and no salt
 **What's wrong.** Passwords are stored as MD5. If the database ever leaks, cracking tools test
 billions of MD5 guesses a second, and two people with the same password have the same stored value.
 **Proof.** `f8_offline_cracking`: a four-word list cracks Sam's password from the stored value.
+The list contains Sam's real password, as real leaked-password lists contain most people's.
 The check also counts the attack as working if passwords are stored as plain text, with fewer
 than 600,000 PBKDF2 iterations, or identically for two accounts with the same password, so a
 weaker fix can't pass.
