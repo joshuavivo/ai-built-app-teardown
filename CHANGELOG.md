@@ -14,6 +14,12 @@ Fixes to the audited ("after") app, found by an independent review.
 - **F2: sessions expire and logout ends them.** The session token never expired and there was no
   logout, so a copied cookie stayed valid indefinitely. Tokens now stop working after 12 hours, and
   `POST /api/logout` removes the token on the server and clears the cookie.
+- **Bad client input gets a 400, not a server error.** A password or email with a lone
+  surrogate, a non-numeric Content-Length, JSON nested 200,000 deep, a list as the checkout
+  service, or broken text in the dog's name each crashed `after.py` into a 500, most
+  before login. Each now gets a 400. Found by an outside review.
+- **The stored error list is bounded** to the newest 1,000 (the log keeps every one), so a
+  flood of errors can't fill memory.
 - **Bad JSON shape gets a 400.** A body that is valid JSON but not an object (`[1]`) crashed login
   and checkout into a 500. Both now answer 400.
 

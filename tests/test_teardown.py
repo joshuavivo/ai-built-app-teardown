@@ -1,4 +1,6 @@
 import hashlib
+import io
+import json
 import secrets
 import sys
 import unittest
@@ -142,6 +144,43 @@ class TheFixedAppStillWorks(unittest.TestCase):
         c.login("alex@example.com", "alex-pass-123")
         self.assertEqual(c.post("/api/checkout", raw=b"[1]").status, 400)
         self.assertEqual(app.errors, [])
+
+    def test_bad_client_input_is_a_400_not_a_server_error(self):
+        # Each of these used to crash after.py into a 500 (and a stored traceback), most of
+        # them without logging in.
+        app = after.make_app()
+        self.addCleanup(app.close)
+
+        def raw_call(body, content_length=None):
+            seen = {}
+            environ = {"REQUEST_METHOD": "POST", "PATH_INFO": "/api/login", "QUERY_STRING": "",
+                       "CONTENT_LENGTH": content_length if content_length is not None else str(len(body)),
+                       "wsgi.input": io.BytesIO(body), "HTTP_COOKIE": ""}
+            app(environ, lambda status, headers: seen.setdefault("status", int(status.split()[0])))
+            return seen["status"]
+
+        surrogate = json.dumps({"email": "sam@example.com", "password": "\ud800"}).encode()
+        bad_email = json.dumps({"email": "\ud800@example.com", "password": "x"}).encode()
+        deep = b"[" * 200_000 + b"]" * 200_000
+        self.assertEqual(raw_call(surrogate), 400)
+        self.assertEqual(raw_call(bad_email), 400)
+        self.assertEqual(raw_call(b"{}", content_length="abc"), 400)
+        self.assertEqual(raw_call(deep), 400)
+        c = Client(app)
+        c.login("alex@example.com", "alex-pass-123")
+        self.assertEqual(c.post("/api/checkout", {"service": ["bath"]}).status, 400)
+        self.assertEqual(c.post("/api/checkout", raw=json.dumps({"service": "bath", "dog": "\ud800"}).encode()).status, 400)
+        self.assertEqual(app.errors, [])
+
+    def test_only_the_most_recent_errors_are_kept(self):
+        app = after.make_app()
+        self.addCleanup(app.close)
+        app.db.execute("drop table bookings")
+        c = Client(app)
+        c.login("alex@example.com", "alex-pass-123")
+        with mock.patch.object(after, "MAX_KEPT_ERRORS", 2), self.assertLogs("pawprint", level="ERROR"):
+            refs = [c.get("/api/bookings/1").json()["ref"] for _ in range(3)]
+        self.assertEqual([ref for ref, _ in app.errors], refs[1:])
 
     def test_the_detail_is_kept_on_the_server_under_the_reference(self):
         # REPORT.md F9: "The detail is kept on the server under that number." Check it is:
