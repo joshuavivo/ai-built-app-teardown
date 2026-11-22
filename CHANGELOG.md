@@ -33,3 +33,7 @@ Fixes to the audited ("after") app, found by an independent review.
 - README Limits names the remaining gaps (CSV formula injection in the export; a failed-login
   counter and session store that grow without limit); REPORT.md notes that F8's word list contains the real password.
 - README opens with what the holes would cost a business.
+- F9's "who could do it" now says any visitor, not any customer: `before.py` returns the
+  trace from the login route, before anyone has logged in. The README's F2 snippet shows
+  the current session code (it still showed the pre-expiry line), and Limits adds that
+  logout ends only the current session and that there's no request-size limit.

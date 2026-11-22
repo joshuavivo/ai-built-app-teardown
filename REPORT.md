@@ -26,7 +26,7 @@ it sends back, and what it remembers.
 | F6 | Customer list download has no lock | Any visitor | Every customer's name, email and phone | High |
 | F7 | Unlimited password guesses | Any visitor | Into any account with a weak password | Medium |
 | F8 | Passwords stored with a fast hash and no salt | Anyone who gets a copy of the database | Most passwords, in minutes | Medium |
-| F9 | Errors show the code's internals | Any customer | A map of the code for the next attack | Low |
+| F9 | Errors show the code's internals | Any visitor (no login needed) | A map of the code for the next attack | Low |
 
 ## Findings
 
