@@ -1,5 +1,8 @@
 # AI-built app teardown
 
+[![tests](https://github.com/joshuavivo/ai-built-app-teardown/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/joshuavivo/ai-built-app-teardown/actions/workflows/tests.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-informational)](LICENSE)
+
 **An app can pass every demo and still hand a stranger your payment account, your customer list or
 a free checkout.** This is what an audit of one looks like: each hole found, proven with a test that
 runs the attack, fixed, and kept fixed.
