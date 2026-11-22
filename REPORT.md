@@ -78,7 +78,7 @@ linked anywhere, and that was the only protection. Anyone who guessed or found t
 **What's wrong.** The login form lets anyone try passwords forever. A script tries thousands a minute.
 **Proof.** `f7_unlimited_password_guesses`: the right password is the 25th guess and it gets in.
 **Fix.** After 5 wrong passwords in 15 minutes, that account stops accepting attempts for 15 minutes
-and says so. The check happens before the password is even looked at.
+from the fifth miss, and says how long is left. The check happens before the password is even looked at.
 
 ### F8. Passwords stored with a fast hash and no salt
 **What's wrong.** Passwords are stored as MD5. If the database ever leaks, cracking tools test

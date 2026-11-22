@@ -145,6 +145,24 @@ class TheFixedAppStillWorks(unittest.TestCase):
         self.assertEqual(c.post("/api/checkout", raw=b"[1]").status, 400)
         self.assertEqual(app.errors, [])
 
+    def test_a_lockout_lasts_fifteen_minutes_from_when_it_starts(self):
+        # Five misses spread over 14 minutes used to "lock" only until the oldest miss aged out,
+        # so a guess got through 61 seconds after the lock. The lock now runs from its start.
+        app = after.make_app()
+        self.addCleanup(app.close)
+        c = Client(app)
+        t0 = after.time.monotonic()
+        for i in range(after.MAX_FAILURES):
+            with mock.patch.object(after.time, "monotonic", return_value=t0 + i * 210):  # 0..14 min
+                self.assertEqual(c.login("sam@example.com", f"wrong-{i}").status, 401)
+        locked_at = t0 + (after.MAX_FAILURES - 1) * 210
+        with mock.patch.object(after.time, "monotonic", return_value=locked_at + 61):
+            r = c.login("sam@example.com", "wrong-again")
+        self.assertEqual(r.status, 429)
+        self.assertIn("14 minutes", r.text)
+        with mock.patch.object(after.time, "monotonic", return_value=locked_at + after.WINDOW_SECONDS + 1):
+            self.assertEqual(c.login("sam@example.com", "wrong-later").status, 401)  # unlocked, just wrong
+
     def test_bad_client_input_is_a_400_not_a_server_error(self):
         # Each of these used to crash after.py into a 500 (and a stored traceback), most of
         # them without logging in.

@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import logging
+import math
 import secrets
 import sqlite3
 import time
@@ -58,6 +59,7 @@ def make_app():
 
     sessions = {}  # F2: random token -> (user id, when it was issued), kept on the server
     failures = {}  # F7: email -> timestamps of recent failed logins
+    locked = {}    # F7: email -> when its lock ends
     errors = []    # F9: (ref, full traceback) for every server error; also written to the log
 
     def current_user(req):
@@ -89,10 +91,13 @@ def make_app():
                 return reply(sr, 400, {"error": "Bad request"})
             email = email.lower()
             now = time.monotonic()
+            until = locked.get(email, 0.0)
+            if now < until:  # F7: checked before the password is even looked at
+                minutes = math.ceil((until - now) / 60)
+                return reply(sr, 429, {"error": f"Too many attempts. Try again in {minutes} minute{'s' if minutes != 1 else ''}."})
+            locked.pop(email, None)
             recent = [t for t in failures.get(email, []) if now - t < WINDOW_SECONDS]
             failures[email] = recent
-            if len(recent) >= MAX_FAILURES:  # F7: checked before the password is even looked at
-                return reply(sr, 429, {"error": "Too many attempts. Try again in 15 minutes."})
             row = db.execute("select * from users where email = ?", (email,)).fetchone()
             if row and check_password(password, row["pw"]):
                 failures.pop(email, None)
@@ -101,6 +106,9 @@ def make_app():
                 cookie = f"session={token}; Path=/; HttpOnly; Secure; SameSite=Lax"
                 return reply(sr, 200, {"ok": True}, headers=[("Set-Cookie", cookie)])
             recent.append(now)
+            if len(recent) >= MAX_FAILURES:  # F7: the lock runs for the full window from now
+                locked[email] = now + WINDOW_SECONDS
+                failures.pop(email, None)
             return reply(sr, 401, {"error": "Wrong email or password"})
 
         user = current_user(req)
