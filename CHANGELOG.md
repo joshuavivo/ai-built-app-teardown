@@ -5,7 +5,7 @@ This file starts on 2026-11-21; earlier changes are in the git history and the m
 
 ## [Unreleased]
 
-Fixes to the audited ("after") app, found by an independent review.
+Fixes to the audited ("after") app, found by an AI review.
 
 ### Fixed
 - **F9: the error detail is now really kept.** REPORT.md says the detail of a server error is kept
@@ -17,7 +17,7 @@ Fixes to the audited ("after") app, found by an independent review.
 - **Bad client input gets a 400, not a server error.** A password or email with a lone
   surrogate, a non-numeric Content-Length, JSON nested 200,000 deep, a list as the checkout
   service, or broken text in the dog's name each crashed `after.py` into a 500, most
-  before login. Each now gets a 400. Found by an outside review.
+  before login. Each now gets a 400. Found by an AI review.
 - **F7: a lockout lasts the 15 minutes it promises.** The lock was a rolling window, so
   with five misses spread over 14 minutes a guess got through 61 seconds after the lock,
   which didn't match "stops accepting attempts for 15 minutes". The lock now runs for 15
