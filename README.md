@@ -133,7 +133,7 @@ curl -b cookies.txt http://127.0.0.1:8001/api/me
 - There's no CSRF token. `SameSite=Lax` covers the cross-site form case for these routes, but a
   real app with state-changing GET requests or older browsers needs one.
 
-Standard library only, Python 3.10 or later. The tests run in-process; the demo servers listen on 127.0.0.1 only.
+Standard library only, Python 3.11 or later. The tests run in-process; the demo servers listen on 127.0.0.1 only.
 
 ## Credits
 
