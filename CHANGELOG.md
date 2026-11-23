@@ -30,6 +30,7 @@ Fixes to the audited ("after") app, found by an independent review.
   and checkout into a 500. Both now answer 400.
 
 ### Changed
+- README badges at the top: live test status for `main` and the license.
 - README Limits names the remaining gaps (CSV formula injection in the export; a failed-login
   counter and session store that grow without limit); REPORT.md notes that F8's word list contains the real password.
 - README opens with what the holes would cost a business.
