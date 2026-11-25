@@ -30,6 +30,9 @@ Fixes to the audited ("after") app, found by an AI review.
   and checkout into a 500. Both now answer 400.
 
 ### Changed
+- **README Limits opens with what the repo does not show.** Nine fixed findings do not make
+  the app secure, and the flaws in `before.py` are deliberate, so the repo shows the method on
+  an app whose flaws were known in advance, not on unfamiliar code.
 - README badges at the top: live test status for `main` and the license.
 - README Limits names the remaining gaps (CSV formula injection in the export; a failed-login
   counter and session store that grow without limit); REPORT.md notes that F8's word list contains the real password.

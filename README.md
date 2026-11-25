@@ -113,6 +113,10 @@ curl -b cookies.txt http://127.0.0.1:8001/api/me
 
 ## Limits
 
+- Nine fixed findings do not make this app secure. The nine flaws in `before.py` are deliberate
+  (each is tagged there with its finding number), so this repo shows the method on an app
+  whose flaws were known in advance. It is not evidence of finding flaws in code I did not
+  write. The items below are gaps I know remain.
 - The fixes are the standard ones, kept small enough to read. Some would be done differently in
   production: sessions and lockout counters would live in a database or cache rather than memory,
   and the lockout would also count by network address so one person can't lock out many accounts.
